@@ -1,21 +1,14 @@
-import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import app from "./src/app.js";
 
 dotenv.config();
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log("=================================");
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📚 API: http://localhost:${PORT}/api`);
+  console.log(`🏥 Health: http://localhost:${PORT}/health`);
+  console.log("=================================");
 });
-
-try {
-  const models = await ai.models.list();
-
-  console.log("========== AVAILABLE MODELS ==========");
-
-  for await (const model of models) {
-    console.log(model.name);
-  }
-
-} catch (err) {
-  console.error(err);
-}
