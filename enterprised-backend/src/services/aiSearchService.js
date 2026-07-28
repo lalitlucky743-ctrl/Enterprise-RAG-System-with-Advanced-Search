@@ -1,198 +1,347 @@
-import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const apiKey = process.env.GEMINI_API_KEY;
+const apiKey = process.env.OPENROUTER_API_KEY;
 
-console.log("🔑 Gemini API:", apiKey ? "✅ Loaded" : "❌ Missing");
+console.log(
+  "🔑 OpenRouter API:",
+  apiKey ? "✅ Loaded" : "❌ Missing"
+);
 
-let ai = null;
+const client = new OpenAI({
+  apiKey: apiKey,
+  baseURL: "https://openrouter.ai/api/v1",
+});
 
-try {
-  if (apiKey) {
-    ai = new GoogleGenAI({ apiKey });
-    console.log("✅ Gemini initialized successfully");
-  }
-} catch (err) {
-  console.error("❌ Gemini Initialization Error:", err.message);
-}
 
 class AISearchService {
+
   async generateWithRetry(prompt, retries = 3) {
-    const models = [
-  "gemini-2.5-flash-preview-05-20",
-  "gemini-2.5-pro"
-];
 
     let lastError;
 
+    const models = [
+      "deepseek/deepseek-chat-v3-0324:free",
+      "meta-llama/llama-3.3-70b-instruct:free"
+    ];
+
+
     for (const model of models) {
-      console.log(`\n🚀 Trying Model: ${model}`);
+
+      console.log(`🚀 Trying Model: ${model}`);
+
 
       for (let attempt = 1; attempt <= retries; attempt++) {
+
         try {
-          console.log(`🤖 Attempt ${attempt}/${retries}`);
 
-          const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-          });
+          console.log(
+            `🤖 Attempt ${attempt}/${retries}`
+          );
 
-          console.log(`✅ Success using ${model}`);
+
+          const response =
+            await client.chat.completions.create({
+
+              model: model,
+
+              messages: [
+                {
+                  role: "user",
+                  content: prompt
+                }
+              ],
+
+              temperature: 0.7,
+              max_tokens: 1000
+
+            });
+
+
+          console.log(
+            `✅ Success using ${model}`
+          );
+
 
           return response;
-        } catch (error) {
+
+
+        } catch(error) {
+
+
           lastError = error;
 
-          console.error(`❌ ${model} Attempt ${attempt} Failed`);
-          console.error("Status:", error.status);
-          console.error("Message:", error.message);
 
-          if (error.status === 503 && attempt < retries) {
-            console.log("⏳ Gemini busy. Retrying in 2 seconds...");
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-            continue;
+          console.error(
+            `❌ ${model} failed`
+          );
+
+          console.error(
+            error.message
+          );
+
+
+          if(attempt < retries){
+
+            console.log(
+              "⏳ Retrying after 2 seconds..."
+            );
+
+            await new Promise(
+              resolve => setTimeout(resolve,2000)
+            );
+
           }
 
-          break;
         }
+
       }
+
     }
 
+
     throw lastError;
+
   }
 
+
+
   async search(query, documents = []) {
+
+
     const start = Date.now();
 
-    console.log("\n==================================");
-    console.log("🔥 AI SEARCH STARTED");
-    console.log("Question:", query);
+
+    console.log(
+      "\n=============================="
+    );
+
+    console.log(
+      "🔥 AI SEARCH STARTED"
+    );
+
+    console.log(
+      "Question:",
+      query
+    );
+
 
     try {
-      if (!ai) {
-        console.log("⚠️ Gemini not initialized");
-        return this.getFallbackResponse(query, documents);
-      }
+
 
       let context = "";
 
-      if (documents.length > 0) {
-        console.log(`📄 Using ${documents.length} document(s)`);
+
+      if(documents.length > 0){
+
+
+        console.log(
+          `📄 Using ${documents.length} documents`
+        );
+
 
         context = documents
-          .map(
-            (doc) => `
-Title: ${doc.title}
+          .map(doc =>
+
+`Title:
+${doc.title}
 
 Content:
-${doc.content}
-`
+${doc.content}`
+
           )
-          .join("\n----------------------------\n");
-      } else {
-        console.log("📄 No documents found");
+          .join(
+            "\n\n----------------------\n\n"
+          );
+
+
+      }
+      else{
+
+        console.log(
+          "📄 No documents found"
+        );
+
       }
 
-      const prompt =
-        documents.length > 0
-          ? `
-You are an Enterprise AI Assistant.
 
-Instructions:
 
-1. Use the uploaded documents as the primary source.
-2. If the answer is not present in the documents, answer using your general knowledge.
-3. Clearly mention when the answer is based on general knowledge.
-4. Answer in clean Markdown.
-5. Be accurate and concise.
+      let prompt;
 
-DOCUMENTS
+
+
+      if(context){
+
+
+        prompt = `
+
+You are an Enterprise RAG AI Assistant.
+
+Rules:
+
+1. Use documents as primary source.
+2. If information is not available, answer from general knowledge.
+3. Be accurate.
+4. Give clean Markdown response.
+
+
+DOCUMENTS:
 
 ${context}
 
-QUESTION
+
+QUESTION:
 
 ${query}
-`
-          : `
-You are a helpful AI assistant.
 
-Answer the following question clearly using Markdown.
-
-Question:
-
-${query}
 `;
 
-      const response = await this.generateWithRetry(prompt);
+      }
+      else{
 
-      let answer = "";
 
-      if (typeof response.text === "function") {
-        answer = response.text();
-      } else {
-        answer = response.text;
+        prompt = `
+
+You are a helpful AI assistant.
+
+Answer this question clearly using Markdown.
+
+Question:
+
+${query}
+
+`;
+
       }
 
-      console.log("✅ Gemini Response Received");
 
-      if (response.usageMetadata) {
-        console.log("📊 Usage Metadata");
-        console.dir(response.usageMetadata, {
-          depth: null,
-        });
-      }
+
+      const response =
+        await this.generateWithRetry(prompt);
+
+
+
+      const answer =
+        response.choices[0]
+        .message
+        .content;
+
+
 
       console.log(
-        `⏱ Response Time: ${Date.now() - start} ms`
+        "✅ AI Response Received"
       );
 
-      return {
-        answer: answer || "No response generated.",
-        sources: documents.map((doc) => doc.title),
-      };
-    } catch (error) {
-      console.error("\n==================================");
-      console.error("❌ Gemini Final Error");
-      console.error("Status:", error.status);
-      console.error("Message:", error.message);
 
-      return this.getFallbackResponse(query, documents);
+      console.log(
+        `⏱ Time: ${Date.now()-start} ms`
+      );
+
+
+
+      return {
+
+        answer: answer,
+
+        sources:
+          documents.map(
+            doc => doc.title
+          )
+
+      };
+
+
+
+    } catch(error){
+
+
+      console.error(
+        "================================"
+      );
+
+      console.error(
+        "❌ OpenRouter Final Error"
+      );
+
+      console.error(
+        error.message
+      );
+
+
+      return this.getFallbackResponse(
+        query,
+        documents
+      );
+
+
     }
+
+
   }
 
-  getFallbackResponse(query, documents) {
-    console.log("📝 Using fallback response");
 
-    if (!documents || documents.length === 0) {
+
+
+  getFallbackResponse(query, documents){
+
+
+    console.log(
+      "📝 Using fallback response"
+    );
+
+
+    if(!documents || documents.length===0){
+
+
       return {
-        answer: `
-⚠️ Gemini AI is temporarily unavailable.
 
-This usually happens because Google's servers are experiencing high demand.
+        answer:
+
+`⚠️ AI service temporarily unavailable.
 
 Question:
 ${query}
 
-Please try again in a few moments.
-`,
-        sources: [],
+Please try again later.`,
+
+        sources: []
+
       };
+
+
     }
 
+
+
     return {
+
       answer:
-        "⚠️ Gemini AI is currently unavailable.\n\nShowing information from your uploaded documents.\n\n" +
-        documents
-          .map(
-            (doc) => `# ${doc.title}\n\n${doc.content}`
-          )
-          .join("\n\n----------------------------\n\n"),
-      sources: documents.map((doc) => doc.title),
+
+`Showing information from documents:
+
+${documents.map(
+doc =>
+`
+## ${doc.title}
+
+${doc.content}
+`
+).join("\n")}`,
+
+      sources:
+        documents.map(
+          doc=>doc.title
+        )
+
     };
+
+
   }
+
+
 }
+
 
 export default new AISearchService();
