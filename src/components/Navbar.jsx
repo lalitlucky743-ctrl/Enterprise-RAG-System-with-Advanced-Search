@@ -1,4 +1,23 @@
 import React, { useState, useEffect } from 'react'
+import { useAuth } from '../../context/AuthContext';
+
+// Navbar component mein:
+const { user, logout } = useAuth();
+
+// Auth links:
+{user ? (
+  <>
+    <span style={{ color: '#8a92aa', fontSize: '13px' }}>{user.name}</span>
+    <button onClick={logout} className="navlink" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+      Logout
+    </button>
+  </>
+) : (
+  <>
+    <Link to="/login" className="navlink">Login</Link>
+    <Link to="/register" className="cta-nav">Get Started</Link>
+  </>
+)}
 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false)
