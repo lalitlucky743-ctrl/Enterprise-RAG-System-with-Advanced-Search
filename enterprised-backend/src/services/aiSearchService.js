@@ -21,9 +21,9 @@ try {
 class AISearchService {
   async generateWithRetry(prompt, retries = 3) {
     const models = [
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
-    ];
+  "gemini-2.5-flash-preview-05-20",
+  "gemini-2.5-pro"
+];
 
     let lastError;
 
