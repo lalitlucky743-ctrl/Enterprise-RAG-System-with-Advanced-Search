@@ -17,23 +17,21 @@ if (!apiKey) {
 
 
 const client = new OpenAI({
-
   apiKey,
 
   baseURL: "https://openrouter.ai/api/v1",
 
-  defaultHeaders: {
+  timeout: 30000,      // 30 sec max wait
+  maxRetries: 0,       // SDK retry off
 
+  defaultHeaders: {
     "HTTP-Referer":
       "https://enterprise-rag-system-with-advanced.vercel.app",
 
     "X-Title":
       "Enterprise RAG System"
-
   }
-
 });
-
 
 
 class AISearchService {
@@ -44,16 +42,13 @@ class AISearchService {
 
     this.models = [
 
-      // Fast and reliable
-      "openai/gpt-4o-mini",
+  "openai/gpt-4o-mini",
 
-      // Backup
-      "google/gemini-2.0-flash-001",
+  "google/gemini-2.5-flash",
 
-      // Free backup
-      "deepseek/deepseek-chat-v3-0324"
+  "deepseek/deepseek-chat-v3-0324"
 
-    ];
+];
 
   }
 
@@ -75,20 +70,20 @@ class AISearchService {
       );
 
 
-      for(let attempt = 1; attempt <= 3; attempt++){
+      for(let attempt = 1; attempt <= 2; attempt++){
 
 
         try{
 
 
           console.log(
-            `🤖 Attempt ${attempt}/3`
+            `🤖 Attempt ${attempt}/2`
           );
 
 
 
           const response = await client.chat.completions.create({
-
+           
 
             model,
 
@@ -162,21 +157,16 @@ Rules:
           );
 
 
-          console.log(
-            "Message:",
-            error.message
-          );
+          console.error("Status:", error.status);
+console.error("Name:", error.name);
+console.error("Message:", error.message);
+console.error("Response:", error.response?.data);
+console.error(error);
 
 
-
-          if(attempt < 3){
-
-            await new Promise(
-              r=>setTimeout(r,2000)
-            );
-
-          }
-
+         if (attempt < 2) {
+  await new Promise((r) => setTimeout(r, 2000));
+}
 
         }
 
@@ -287,6 +277,7 @@ Answer clearly.
 
 
       const answer =
+      
       response.choices?.[0]
       ?.message
       ?.content;
