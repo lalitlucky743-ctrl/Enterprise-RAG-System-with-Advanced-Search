@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../hooks/useChat';
-import MarkdownRenderer from '../components/Chat/MarkdownRender';
+import MarkdownRenderer from '../components/Chat/MarkdownRenderer';
 import TypingAnimation from '../components/Chat/TypingAnimation';
 import CopyButton from '../components/Chat/CopyButton';
 import DownloadButton from '../components/Chat/DownloadButton';
+import ChatScroll from '../components/Chat/ChatScroll';
+import AIFeatures from '../components/AI/AIFeatures';
+import VoiceInput from '../components/AI/VoiceInput';
+import TextToSpeech from '../components/AI/TextToSpeech';
+import MultiPDFUpload from '../components/AI/MultiPDFUpload';
 import { api } from '../services/api';
 
 const Console = () => {
@@ -12,6 +17,7 @@ const Console = () => {
   const [newDoc, setNewDoc] = useState({ title: '', content: '' });
   const [uploading, setUploading] = useState(false);
   const [documents, setDocuments] = useState([]);
+  const [selectedAnswer, setSelectedAnswer] = useState('');
   const { token } = useAuth();
   
   const { messages, isLoading, streamingMessage, sendMessage, clearHistory, messagesEndRef } = useChat(token);
@@ -56,6 +62,16 @@ const Console = () => {
     setUploading(false);
   };
 
+  const handleVoiceTranscript = (transcript) => {
+    setQuery(transcript);
+    setTimeout(handleSearch, 500);
+  };
+
+  const handleFeatureSelect = (featureId, result) => {
+    // Handle feature result
+    console.log(`Feature ${featureId} result:`, result);
+  };
+
   return (
     <div className="console-page">
       <div className="console-container">
@@ -83,66 +99,74 @@ const Console = () => {
             {documents.map((doc, i) => (
               <div key={i} className="doc-item">{doc.title}</div>
             ))}
+            <MultiPDFUpload onUploadComplete={loadDocuments} />
           </div>
         </div>
 
         {/* Main Chat */}
         <div className="console-main">
-          <div className="messages-container">
-            {messages.length === 0 && !streamingMessage && (
-              <div className="welcome-message">
-                <h2>👋 Welcome to Enterprise RAG</h2>
-                <p>Ask anything about your documents or general knowledge</p>
-              </div>
-            )}
-
-            {messages.map((msg, i) => (
-              <div key={i} className={`message ${msg.role}`}>
-                <div className="message-avatar">
-                  {msg.role === 'user' ? '👤' : '🤖'}
+          <ChatScroll>
+            <div className="messages-container">
+              {messages.length === 0 && !streamingMessage && (
+                <div className="welcome-message">
+                  <h2>👋 Welcome to Enterprise RAG</h2>
+                  <p>Ask anything about your documents or general knowledge</p>
                 </div>
-                <div className="message-content">
-                  {msg.role === 'assistant' && !msg.isError ? (
-                    <MarkdownRenderer content={msg.content} />
-                  ) : (
-                    <div className="message-text">{msg.content}</div>
-                  )}
-                  {msg.role === 'assistant' && !msg.isError && (
-                    <div className="message-actions">
-                      <CopyButton text={msg.content} />
-                      <DownloadButton content={msg.content} title="AI-Answer" />
+              )}
+
+              {messages.map((msg, i) => (
+                <div key={i} className={`message ${msg.role}`}>
+                  <div className="message-avatar">
+                    {msg.role === 'user' ? '👤' : '🤖'}
+                  </div>
+                  <div className="message-content">
+                    {msg.role === 'assistant' && !msg.isError ? (
+                      <MarkdownRenderer content={msg.content} />
+                    ) : (
+                      <div className="message-text">{msg.content}</div>
+                    )}
+                    {msg.role === 'assistant' && !msg.isError && (
+                      <>
+                        <div className="message-actions">
+                          <CopyButton text={msg.content} />
+                          <DownloadButton content={msg.content} title="AI-Answer" />
+                          <TextToSpeech text={msg.content} />
+                        </div>
+                        <AIFeatures content={msg.content} onFeatureSelect={handleFeatureSelect} />
+                      </>
+                    )}
+                    <div className="message-time">
+                      {new Date(msg.timestamp).toLocaleTimeString()}
                     </div>
-                  )}
-                  <div className="message-time">
-                    {new Date(msg.timestamp).toLocaleTimeString()}
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
 
-            {streamingMessage && (
-              <div className="message assistant">
-                <div className="message-avatar">🤖</div>
-                <div className="message-content">
-                  <MarkdownRenderer content={streamingMessage} />
-                  <span className="cursor-blink">▌</span>
+              {streamingMessage && (
+                <div className="message assistant">
+                  <div className="message-avatar">🤖</div>
+                  <div className="message-content">
+                    <MarkdownRenderer content={streamingMessage} />
+                    <span className="cursor-blink">▌</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {isLoading && !streamingMessage && (
-              <div className="message assistant">
-                <div className="message-avatar">🤖</div>
-                <div className="message-content">
-                  <TypingAnimation />
+              {isLoading && !streamingMessage && (
+                <div className="message assistant">
+                  <div className="message-avatar">🤖</div>
+                  <div className="message-content">
+                    <TypingAnimation />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div ref={messagesEndRef} />
-          </div>
+              <div ref={messagesEndRef} />
+            </div>
+          </ChatScroll>
 
           <div className="input-container">
+            <VoiceInput onTranscript={handleVoiceTranscript} />
             <textarea
               className="query-input"
               rows="2"
@@ -272,11 +296,11 @@ const Console = () => {
           flex-direction: column;
           backdrop-filter: blur(10px);
           overflow: hidden;
+          position: relative;
         }
         .messages-container {
-          flex: 1;
           padding: 24px;
-          overflow-y: auto;
+          min-height: 300px;
         }
         .welcome-message {
           text-align: center;
@@ -340,6 +364,7 @@ const Console = () => {
           margin-top: 12px;
           padding-top: 10px;
           border-top: 1px solid rgba(255,255,255,0.05);
+          flex-wrap: wrap;
         }
         .message-time {
           font-size: 10px;
@@ -360,6 +385,7 @@ const Console = () => {
           padding: 16px 24px;
           border-top: 1px solid #232b3d;
           background: rgba(0,0,0,0.2);
+          align-items: center;
         }
         .query-input {
           flex: 1;
