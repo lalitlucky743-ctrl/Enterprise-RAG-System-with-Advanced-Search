@@ -29,7 +29,8 @@ app.use(helmet());
 
 const allowedOrigins = [
   "https://enterprise-rag-system-with-advanced.vercel.app",
-  "http://localhost:5173"
+  "http://localhost:5173",
+   "http://localhost:3000"
 ];
 
 const corsOptions = {
