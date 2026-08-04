@@ -8,108 +8,268 @@ export const useChat = (token) => {
   const [streamingMessage, setStreamingMessage] = useState("");
   const messagesEndRef = useRef(null);
 
-  // Load chat history
+  // ==============================
+  // LOAD CHAT HISTORY
+  // ==============================
   useEffect(() => {
-    const saved = localStorage.getItem("chatHistory");
-    if (saved) {
-      try {
-        setMessages(JSON.parse(saved));
-      } catch (err) {
-        console.error("Failed to parse chat history:", err);
+    try {
+      const saved = localStorage.getItem("chatHistory");
+
+      if (saved) {
+        const parsed = JSON.parse(saved);
+
+        if (Array.isArray(parsed)) {
+          setMessages(parsed);
+        }
       }
+    } catch (error) {
+      console.error("Failed to load chat history:", error);
     }
   }, []);
 
-  // Save chat history
+  // ==============================
+  // SAVE CHAT HISTORY
+  // ==============================
   useEffect(() => {
-    localStorage.setItem("chatHistory", JSON.stringify(messages));
+    try {
+      localStorage.setItem("chatHistory", JSON.stringify(messages));
+    } catch (error) {
+      console.error("Failed to save chat history:", error);
+    }
   }, [messages]);
 
-  // Auto scroll
+  // ==============================
+  // AUTO SCROLL
+  // ==============================
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({
+        behavior: "smooth",
+      });
+    }
   }, [messages, streamingMessage]);
 
+  // ==============================
+  // SEND MESSAGE
+  // ==============================
   const sendMessage = async (query) => {
-    if (!query.trim() || !token) return;
+    const cleanQuery = query?.trim();
 
-    const userMessage = {
-      role: "user",
-      content: query,
-      timestamp: new Date().toISOString(),
-    };
+    if (!cleanQuery) {
+      return;
+    }
 
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-    setStreamingMessage("");
-
-    try {
-        console.log("Final URL:", `${API_URL}/api/search`);
-      const response = await fetch(`${API_URL}/search`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ query }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server Error (${response.status})`);
-      }
-
-      const data = await response.json();
-
-      if (data.success && data.answer) {
-        // Typing animation
-        const words = data.answer.split(" ");
-        let current = "";
-
-        for (let i = 0; i < words.length; i++) {
-          current += (i === 0 ? "" : " ") + words[i];
-          setStreamingMessage(current);
-
-          await new Promise((resolve) => setTimeout(resolve, 25));
-        }
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: data.answer,
-            timestamp: new Date().toISOString(),
-            sources: data.results || [],
-          },
-        ]);
-
-        setStreamingMessage("");
-      } else {
-        throw new Error(data.error || "No response received");
-      }
-    } catch (err) {
-      console.error(err);
+    if (!token) {
+      console.error("❌ No authentication token found");
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `❌ ${err.message}`,
+          content: "❌ Please login again.",
           timestamp: new Date().toISOString(),
           isError: true,
         },
       ]);
 
+      return;
+    }
+
+    if (!API_URL) {
+      console.error("❌ VITE_API_URL is missing");
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "❌ Backend URL is missing.",
+          timestamp: new Date().toISOString(),
+          isError: true,
+        },
+      ]);
+
+      return;
+    }
+
+    // ==============================
+    // USER MESSAGE
+    // ==============================
+    const userMessage = {
+      role: "user",
+      content: cleanQuery,
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+
+    setIsLoading(true);
+    setStreamingMessage("");
+
+    try {
+      // Remove trailing slash if present
+      const baseURL = API_URL.replace(/\/+$/, "");
+
+      // IMPORTANT:
+      // .env already contains /api
+      // Therefore we only add /search here.
+      const searchURL = `${baseURL}/search`;
+
+      console.log("🚀 Backend URL:", baseURL);
+      console.log("🔗 Search URL:", searchURL);
+      console.log("🔐 Token available:", Boolean(token));
+
+      // ==============================
+      // API REQUEST
+      // ==============================
+      const response = await fetch(searchURL, {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+
+        body: JSON.stringify({
+          query: cleanQuery,
+        }),
+      });
+
+      console.log("📡 Response Status:", response.status);
+
+      // ==============================
+      // READ RESPONSE
+      // ==============================
+      let data = {};
+
+      try {
+        data = await response.json();
+      } catch (error) {
+        console.error("❌ Could not parse server response:", error);
+      }
+
+      console.log("📦 Server Response:", data);
+
+      // ==============================
+      // 401
+      // ==============================
+      if (response.status === 401) {
+        throw new Error(
+          "Authentication failed. Please logout and login again."
+        );
+      }
+
+      // ==============================
+      // 403
+      // ==============================
+      if (response.status === 403) {
+        throw new Error("You are not authorized to use this service.");
+      }
+
+      // ==============================
+      // 404
+      // ==============================
+      if (response.status === 404) {
+        throw new Error(
+          "Search API not found. Please check the backend URL."
+        );
+      }
+
+      // ==============================
+      // OTHER SERVER ERRORS
+      // ==============================
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            data?.message ||
+            `Server Error (${response.status})`
+        );
+      }
+
+      // ==============================
+      // CHECK AI ANSWER
+      // ==============================
+      if (!data || !data.answer) {
+        throw new Error(
+          data?.error ||
+            data?.message ||
+            "No answer received from AI."
+        );
+      }
+
+      // ==============================
+      // TYPING ANIMATION
+      // ==============================
+      const answer = data.answer;
+
+      const words = answer.split(" ");
+
+      let currentText = "";
+
+      for (let i = 0; i < words.length; i++) {
+        currentText +=
+          i === 0 ? words[i] : " " + words[i];
+
+        setStreamingMessage(currentText);
+
+        await new Promise((resolve) => {
+          setTimeout(resolve, 20);
+        });
+      }
+
+      // ==============================
+      // ADD AI MESSAGE
+      // ==============================
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: answer,
+          timestamp: new Date().toISOString(),
+
+          // Your backend may return results
+          sources: Array.isArray(data.results)
+            ? data.results
+            : [],
+        },
+      ]);
+
       setStreamingMessage("");
+    } catch (error) {
+      console.error("❌ Chat Error:", error);
+
+      setStreamingMessage("");
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `❌ ${error.message || "Something went wrong."}`,
+          timestamp: new Date().toISOString(),
+          isError: true,
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ==============================
+  // CLEAR CHAT
+  // ==============================
   const clearHistory = () => {
     setMessages([]);
-    localStorage.removeItem("chatHistory");
+    setStreamingMessage("");
+
+    try {
+      localStorage.removeItem("chatHistory");
+    } catch (error) {
+      console.error("Failed to clear chat history:", error);
+    }
   };
 
+  // ==============================
+  // RETURN
+  // ==============================
   return {
     messages,
     isLoading,
