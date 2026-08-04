@@ -1,89 +1,174 @@
-import React, { useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Pricing = () => {
-  useEffect(() => {
-    const hudLeft = document.getElementById('hud-left')
-    const hudRight = document.getElementById('hud-right')
-    if (hudLeft) hudLeft.classList.remove('visible')
-    if (hudRight) hudRight.classList.remove('visible')
-    
-    if (window.__threeState) {
-      window.__threeState.morph = 0.5
-      window.__threeState.dive = 0.3
-      window.__threeState.fade = 0.6
-    }
-  }, [])
+  const { user, token } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState(null);
 
   const plans = [
     {
       name: 'Starter',
-      price: '$99',
+      price: 99,
       period: '/month',
-      features: [
-        'Up to 10,000 documents',
-        'Hybrid search',
-        'Basic reranking',
-        'REST API',
-        'Email support'
-      ],
+      features: ['Up to 10,000 documents', 'Hybrid search', 'Basic reranking', 'REST API', 'Email support'],
       cta: 'Get Started',
-      popular: false
+      popular: false,
+      razorpayId: 'plan_xxxxx' // Your Razorpay plan ID
     },
     {
       name: 'Professional',
-      price: '$499',
+      price: 499,
       period: '/month',
-      features: [
-        'Up to 100,000 documents',
-        'Advanced hybrid search',
-        'Cross-encoder reranking',
-        'Full API + SDKs',
-        'Priority support',
-        'SSO/SAML',
-        'Audit logs'
-      ],
+      features: ['Up to 100,000 documents', 'Advanced hybrid search', 'Cross-encoder reranking', 'Full API + SDKs', 'Priority support', 'SSO/SAML', 'Audit logs'],
       cta: 'Start Free Trial',
-      popular: true
+      popular: true,
+      razorpayId: 'plan_xxxxx'
     },
     {
       name: 'Enterprise',
-      price: 'Custom',
-      period: '',
-      features: [
-        'Unlimited documents',
-        'Custom models',
-        'On-premise deployment',
-        '24/7 dedicated support',
-        'SLA guarantee',
-        'Custom integrations',
-        'Training & onboarding'
-      ],
+      price: 999,
+      period: '/month',
+      features: ['Unlimited documents', 'Custom models', 'On-premise deployment', '24/7 dedicated support', 'SLA guarantee', 'Custom integrations', 'Training & onboarding'],
       cta: 'Contact Sales',
-      popular: false
+      popular: false,
+      razorpayId: 'plan_xxxxx'
     }
-  ]
+  ];
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handlePayment = async (plan) => {
+    if (!user) {
+      alert('Please login first to subscribe!');
+      window.location.href = '/login';
+      return;
+    }
+
+    setSelectedPlan(plan);
+    setLoading(true);
+
+    try {
+      // Load Razorpay script
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        alert('Failed to load Razorpay. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      // Create order on backend
+      const response = await fetch('http://localhost:5000/api/payment/create-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          amount: plan.price * 100, // in paise
+          currency: 'INR',
+          plan: plan.name
+        })
+      });
+
+      const orderData = await response.json();
+
+      if (!orderData.success) {
+        throw new Error(orderData.error || 'Payment failed');
+      }
+
+      // Razorpay options
+      const options = {
+        key: 'rzp_test_TC4RsrdV2Ybyl4', // Your Razorpay Key ID
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'ENTERPRISED',
+        description: `Subscription: ${plan.name} Plan`,
+        order_id: orderData.orderId,
+        handler: function(response) {
+          alert(`✅ Payment Successful! Payment ID: ${response.razorpay_payment_id}`);
+          // Verify payment on backend
+          verifyPayment(response, plan);
+        },
+        prefill: {
+          name: user.name || 'Customer',
+          email: user.email || 'customer@email.com',
+          contact: '9999999999'
+        },
+        notes: {
+          plan: plan.name,
+          userId: user.id
+        },
+        theme: {
+          color: '#8b6bf6'
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+
+    } catch (error) {
+      console.error('Payment error:', error);
+      alert('Payment failed: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyPayment = async (response, plan) => {
+    try {
+      const verifyRes = await fetch('http://localhost:5000/api/payment/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_signature: response.razorpay_signature,
+          plan: plan.name
+        })
+      });
+
+      const data = await verifyRes.json();
+      if (data.success) {
+        alert('🎉 Subscription activated successfully!');
+      } else {
+        alert('⚠️ Payment verification failed. Please contact support.');
+      }
+    } catch (error) {
+      console.error('Verification error:', error);
+    }
+  };
 
   return (
-    <div className="page-container">
+    <div className="pricing-page">
       <style>{`
-        .page-container {
+        .pricing-page {
           padding-top: 100px;
           min-height: 100vh;
+          background: #05070d;
+        }
+        .pricing-container {
           max-width: 1200px;
           margin: 0 auto;
-          padding-left: 24px;
-          padding-right: 24px;
-          position: relative;
-          z-index: 2;
+          padding: 0 24px 60px;
         }
-
-        .page-header {
+        .pricing-header {
           text-align: center;
           margin-bottom: 60px;
         }
-
-        .page-header h1 {
+        .pricing-header h1 {
           font-family: 'Space Grotesk', sans-serif;
           font-size: clamp(36px, 5vw, 56px);
           font-weight: 700;
@@ -94,22 +179,19 @@ const Pricing = () => {
           background-clip: text;
           color: transparent;
         }
-
-        .page-header p {
+        .pricing-header p {
           color: #8a92aa;
           font-size: 18px;
           max-width: 600px;
           margin: 0 auto;
           line-height: 1.6;
         }
-
         .pricing-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
           gap: 24px;
           align-items: start;
         }
-
         .pricing-card {
           background: rgba(15, 20, 32, 0.85);
           backdrop-filter: blur(10px);
@@ -120,22 +202,18 @@ const Pricing = () => {
           position: relative;
           overflow: hidden;
         }
-
         .pricing-card:hover {
           transform: translateY(-8px) scale(1.02);
         }
-
         .pricing-card.popular {
           border-color: #8b6bf6;
           transform: scale(1.05);
-          box-shadow: 0 0 40px rgba(139, 107, 246, 0.15);
+          box-shadow: 0 0 40px rgba(139,107,246,0.15);
         }
-
         .pricing-card.popular:hover {
           transform: scale(1.05) translateY(-8px);
-          box-shadow: 0 0 60px rgba(139, 107, 246, 0.25);
+          box-shadow: 0 0 60px rgba(139,107,246,0.25);
         }
-
         .pricing-card.popular::before {
           content: '';
           position: absolute;
@@ -149,12 +227,10 @@ const Pricing = () => {
           mask-composite: exclude;
           animation: borderGlow 3s ease-in-out infinite;
         }
-
         @keyframes borderGlow {
           0%, 100% { background-position: 0% 50%; }
           50% { background-position: 100% 50%; }
         }
-
         .popular-badge {
           position: absolute;
           top: -12px;
@@ -168,9 +244,8 @@ const Pricing = () => {
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          box-shadow: 0 4px 20px rgba(139, 107, 246, 0.3);
+          box-shadow: 0 4px 20px rgba(139,107,246,0.3);
         }
-
         .pricing-card .name {
           font-family: 'Space Grotesk', sans-serif;
           font-size: 20px;
@@ -178,7 +253,6 @@ const Pricing = () => {
           margin-bottom: 8px;
           color: #eef1f8;
         }
-
         .pricing-card .price {
           font-family: 'Space Grotesk', sans-serif;
           font-size: 42px;
@@ -186,35 +260,30 @@ const Pricing = () => {
           margin: 16px 0 4px;
           color: #eef1f8;
         }
-
         .pricing-card .period {
           color: #5b6377;
           font-size: 14px;
         }
-
         .pricing-card .features {
           list-style: none;
           padding: 0;
           margin: 28px 0 32px;
         }
-
         .pricing-card .features li {
           padding: 10px 0;
           color: #8a92aa;
           display: flex;
           align-items: center;
           gap: 12px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+          border-bottom: 1px solid rgba(255,255,255,0.03);
           font-size: 14px;
         }
-
         .pricing-card .features li::before {
           content: '✓';
           color: #2fd3d0;
           font-weight: bold;
           font-size: 16px;
         }
-
         .pricing-card .cta-btn {
           display: block;
           text-align: center;
@@ -226,25 +295,27 @@ const Pricing = () => {
           font-weight: 600;
           text-decoration: none;
           transition: all 0.3s ease;
+          cursor: pointer;
+          width: 100%;
         }
-
         .pricing-card .cta-btn:hover {
-          background: rgba(255, 255, 255, 0.05);
+          background: rgba(255,255,255,0.05);
           border-color: #8b6bf6;
         }
-
+        .pricing-card .cta-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
         .pricing-card.popular .cta-btn {
           background: linear-gradient(135deg, #8b6bf6, #6b4fd4);
           border: none;
           color: white;
-          box-shadow: 0 4px 20px rgba(139, 107, 246, 0.3);
+          box-shadow: 0 4px 20px rgba(139,107,246,0.3);
         }
-
         .pricing-card.popular .cta-btn:hover {
           transform: scale(1.02);
-          box-shadow: 0 8px 30px rgba(139, 107, 246, 0.4);
+          box-shadow: 0 8px 30px rgba(139,107,246,0.4);
         }
-
         @media (max-width: 768px) {
           .pricing-card.popular {
             transform: scale(1);
@@ -255,31 +326,37 @@ const Pricing = () => {
         }
       `}</style>
 
-      <div className="page-header">
-        <h1>Simple, Transparent Pricing</h1>
-        <p>Choose the plan that fits your needs. All plans include hybrid search and reranking.</p>
-      </div>
+      <div className="pricing-container">
+        <div className="pricing-header">
+          <h1>Simple, Transparent Pricing</h1>
+          <p>Choose the plan that fits your needs. All plans include hybrid search and reranking.</p>
+        </div>
 
-      <div className="pricing-grid">
-        {plans.map((plan, i) => (
-          <div className={`pricing-card ${plan.popular ? 'popular' : ''}`} key={i}>
-            {plan.popular && <div className="popular-badge">Most Popular</div>}
-            <div className="name">{plan.name}</div>
-            <div className="price">{plan.price}</div>
-            <div className="period">{plan.period}</div>
-            <ul className="features">
-              {plan.features.map((feature, j) => (
-                <li key={j}>{feature}</li>
-              ))}
-            </ul>
-            <Link to="/console" className="cta-btn">
-              {plan.cta}
-            </Link>
-          </div>
-        ))}
+        <div className="pricing-grid">
+          {plans.map((plan, i) => (
+            <div className={`pricing-card ${plan.popular ? 'popular' : ''}`} key={i}>
+              {plan.popular && <div className="popular-badge">Most Popular</div>}
+              <div className="name">{plan.name}</div>
+              <div className="price">₹{plan.price}</div>
+              <div className="period">{plan.period}</div>
+              <ul className="features">
+                {plan.features.map((feature, j) => (
+                  <li key={j}>{feature}</li>
+                ))}
+              </ul>
+              <button
+                className="cta-btn"
+                onClick={() => handlePayment(plan)}
+                disabled={loading && selectedPlan?.name === plan.name}
+              >
+                {loading && selectedPlan?.name === plan.name ? 'Processing...' : plan.cta}
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Pricing
+export default Pricing;

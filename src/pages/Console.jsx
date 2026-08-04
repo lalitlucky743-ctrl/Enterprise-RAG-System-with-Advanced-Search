@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // ✅ Add useRef
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../hooks/useChat';
 import MarkdownRenderer from '../components/Chat/MarkdownRenderer';
@@ -11,6 +11,7 @@ import VoiceInput from '../components/AI/VoiceInput';
 import TextToSpeech from '../components/AI/TextToSpeech';
 import MultiPDFUpload from '../components/AI/MultiPDFUpload';
 import { api } from '../services/api';
+import { toast, Toaster } from 'react-hot-toast'; // ✅ Add toast
 
 const Console = () => {
   const [query, setQuery] = useState('');
@@ -19,6 +20,7 @@ const Console = () => {
   const [documents, setDocuments] = useState([]);
   const [selectedAnswer, setSelectedAnswer] = useState('');
   const { token } = useAuth();
+  const fileInputRef = useRef(null); // ✅ Add file input ref
   
   const { messages, isLoading, streamingMessage, sendMessage, clearHistory, messagesEndRef } = useChat(token);
 
@@ -41,25 +43,65 @@ const Console = () => {
     setQuery('');
   };
 
+  // ✅ UPDATED UPLOAD FUNCTION - Working
   const handleUpload = async () => {
-    if (!newDoc.title || !newDoc.content) {
-      alert('Please enter both title and content');
+    const title = newDoc.title.trim();
+    const content = newDoc.content.trim();
+
+    if (!title) {
+      toast.error('Please enter document title');
       return;
     }
+
+    if (!content) {
+      toast.error('Please enter document content');
+      return;
+    }
+
     setUploading(true);
     try {
-      const result = await api.uploadDocument(newDoc, token);
+      const result = await api.uploadDocument({ 
+        title, 
+        content, 
+        fileType: 'txt' 
+      }, token);
+      
+      console.log('Upload result:', result);
+      
       if (result.success) {
-        alert('✅ Document uploaded successfully!');
+        toast.success('✅ Document uploaded successfully!');
         setNewDoc({ title: '', content: '' });
-        loadDocuments();
+        await loadDocuments();
       } else {
-        alert('❌ Upload failed: ' + (result.error || 'Unknown error'));
+        toast.error('❌ Upload failed: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      alert('❌ Upload failed: ' + error.message);
+      console.error('Upload error:', error);
+      toast.error('❌ Upload failed: ' + error.message);
     }
     setUploading(false);
+  };
+
+  // ✅ ADD FILE UPLOAD HANDLER
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const content = e.target.result;
+      setNewDoc({
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        content: content.substring(0, 10000) // Limit content
+      });
+      toast.success(`📄 File loaded: ${file.name}`);
+    };
+    reader.onerror = () => {
+      toast.error('❌ Failed to read file');
+    };
+    reader.readAsText(file);
+    // Reset input so same file can be re-uploaded
+    event.target.value = '';
   };
 
   const handleVoiceTranscript = (transcript) => {
@@ -68,12 +110,24 @@ const Console = () => {
   };
 
   const handleFeatureSelect = (featureId, result) => {
-    // Handle feature result
     console.log(`Feature ${featureId} result:`, result);
   };
 
   return (
     <div className="console-page">
+      {/* ✅ ADD TOASTER FOR NOTIFICATIONS */}
+      <Toaster 
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: '#0f1420',
+            color: '#eef1f8',
+            border: '1px solid #232b3d',
+            borderRadius: '8px'
+          }
+        }}
+      />
+
       <div className="console-container">
         {/* Sidebar */}
         <div className="console-sidebar">
@@ -180,22 +234,48 @@ const Console = () => {
             </button>
           </div>
 
+          {/* ✅ UPDATED UPLOAD SECTION - WORKING */}
           <div className="upload-section">
             <input
               type="text"
               placeholder="Document Title"
               value={newDoc.title}
               onChange={(e) => setNewDoc({...newDoc, title: e.target.value})}
+              className="upload-input"
             />
-            <textarea
-              placeholder="Document Content"
-              value={newDoc.content}
-              onChange={(e) => setNewDoc({...newDoc, content: e.target.value})}
-              rows="2"
-            />
-            <button onClick={handleUpload} disabled={uploading || !newDoc.title || !newDoc.content}>
-              {uploading ? 'Uploading...' : '📤 Upload'}
-            </button>
+            <div className="upload-content-wrapper">
+              <textarea
+                placeholder="Document Content (paste text here or upload file below)"
+                value={newDoc.content}
+                onChange={(e) => setNewDoc({...newDoc, content: e.target.value})}
+                rows="2"
+                className="upload-textarea"
+              />
+              <div className="upload-actions">
+                {/* ✅ FILE INPUT - HIDDEN */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  accept=".txt,.md,.csv,.json"
+                  style={{ display: 'none' }}
+                />
+                <button 
+                  className="upload-file-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  type="button"
+                >
+                  📎 Choose File
+                </button>
+                <button 
+                  className="upload-submit-btn"
+                  onClick={handleUpload}
+                  disabled={uploading || !newDoc.title || !newDoc.content}
+                >
+                  {uploading ? '⏳ Uploading...' : '📤 Upload'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -425,16 +505,17 @@ const Console = () => {
           transform: none;
         }
 
+        /* ✅ UPDATED UPLOAD SECTION STYLES */
         .upload-section {
           display: grid;
-          grid-template-columns: 1fr 2fr auto;
+          grid-template-columns: 1fr 2fr;
           gap: 12px;
           padding: 12px 24px;
           border-top: 1px solid #232b3d;
           background: rgba(0,0,0,0.15);
-          align-items: end;
+          align-items: start;
         }
-        .upload-section input, .upload-section textarea {
+        .upload-input {
           padding: 10px 14px;
           background: rgba(20, 26, 41, 0.8);
           border: 1px solid #232b3d;
@@ -442,30 +523,70 @@ const Console = () => {
           color: #eef1f8;
           font-size: 13px;
           font-family: 'Inter', sans-serif;
+          width: 100%;
         }
-        .upload-section input:focus, .upload-section textarea:focus {
+        .upload-input:focus {
           outline: none;
           border-color: #8b6bf6;
         }
-        .upload-section textarea {
-          resize: vertical;
-          min-height: 40px;
+        .upload-content-wrapper {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
         }
-        .upload-section button {
-          padding: 10px 20px;
+        .upload-textarea {
+          padding: 10px 14px;
+          background: rgba(20, 26, 41, 0.8);
+          border: 1px solid #232b3d;
+          border-radius: 6px;
+          color: #eef1f8;
+          font-size: 13px;
+          font-family: 'Inter', sans-serif;
+          resize: vertical;
+          min-height: 50px;
+          width: 100%;
+        }
+        .upload-textarea:focus {
+          outline: none;
+          border-color: #8b6bf6;
+        }
+        .upload-actions {
+          display: flex;
+          gap: 8px;
+        }
+        .upload-file-btn {
+          padding: 8px 16px;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid #232b3d;
+          border-radius: 6px;
+          color: #8a92aa;
+          font-weight: 500;
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 0.3s;
+        }
+        .upload-file-btn:hover {
+          background: rgba(255,255,255,0.1);
+          color: #eef1f8;
+          border-color: #8b6bf6;
+        }
+        .upload-submit-btn {
+          padding: 8px 20px;
           background: linear-gradient(135deg, #2fd3d0, #1a9e9c);
           border: none;
           border-radius: 6px;
           color: white;
           font-weight: 600;
+          font-size: 13px;
           cursor: pointer;
           transition: all 0.3s;
           white-space: nowrap;
         }
-        .upload-section button:hover {
+        .upload-submit-btn:hover {
           transform: translateY(-2px);
+          box-shadow: 0 4px 20px rgba(47,211,208,0.3);
         }
-        .upload-section button:disabled {
+        .upload-submit-btn:disabled {
           opacity: 0.5;
           cursor: not-allowed;
           transform: none;

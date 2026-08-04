@@ -12,7 +12,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Preloader from './components/Preloader';
 import { AuthProvider, useAuth } from './context/AuthContext';
-
+import Payment from './pages/Payment';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -55,6 +55,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/payment" element={<Payment />} />
           <Route path="/console" element={
             <ProtectedRoute>
               <Console />

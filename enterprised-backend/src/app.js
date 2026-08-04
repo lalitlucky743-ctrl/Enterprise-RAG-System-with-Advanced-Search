@@ -10,6 +10,7 @@ import documentRoutes from './routes/documentRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
 
 import errorHandler from './middleware/errorHandler.js';
+import paymentRoutes from './routes/paymentRoutes.js';
 
 dotenv.config();
 
@@ -97,6 +98,8 @@ app.use(express.urlencoded({
 // ===============================
 
 app.use(morgan("dev"));
+
+app.use('/api/payment', paymentRoutes);
 
 
 
