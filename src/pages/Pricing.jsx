@@ -88,7 +88,7 @@ const Pricing = () => {
 
       // Razorpay options
       const options = {
-        key: 'rzp_test_TC4RsrdV2Ybyl4', // Your Razorpay Key ID
+        key: import.meta.env.VITE_RAZORPAY_KEY, // Your Razorpay Key ID
         amount: orderData.amount,
         currency: orderData.currency,
         name: 'ENTERPRISED',
